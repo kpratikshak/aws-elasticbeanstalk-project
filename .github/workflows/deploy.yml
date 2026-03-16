@@ -1,0 +1,43 @@
+
+name: Elastic Beanstalk CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          [cite_start]aws-region: ap-south-1 # Based on Mumbai region in pdf [cite: 61]
+
+      # Step-1: Zip the code as required by manual steps [cite: 10, 154]
+      - name: Create Deployment Package
+        run: zip -r deploy_package.zip . -x "*.git*"
+
+      # Step-2: Terraform Apply to ensure infrastructure is ready
+      - name: Setup Infrastructure
+        run: |
+          terraform init
+          terraform apply -auto-approve
+
+      # Step-3: Upload and Deploy to Elastic Beanstalk [cite: 67]
+      - name: Deploy to EB
+        run: |
+          aws s3 cp deploy_package.zip s3://my-eb-bucket/deploy_package.zip
+          aws elasticbeanstalk create-application-version \
+            --application-name "EC2-ElasticBeanStalk" \
+            --version-label "ver-${{ github.sha }}" \
+            --source-bundle S3Bucket="my-eb-bucket",S3Key="deploy_package.zip"
+          
+          aws elasticbeanstalk update-environment \
+            --environment-name "EC2-ElasticBeanStalk-HA-env-1" \
+            --version-label "ver-${{ github.sha }}"
